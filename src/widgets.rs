@@ -47,7 +47,9 @@ pub use self::{
     gauge::{Gauge, LineGauge},
     list::{List, ListDirection, ListItem, ListState},
     paragraph::{Paragraph, Wrap},
-    scrollbar::{ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    scrollbar::{
+        ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarPosition, ScrollbarState,
+    },
     sparkline::{RenderDirection, Sparkline},
     table::{Cell, HighlightSpacing, Row, Table, TableState},
     tabs::Tabs,
