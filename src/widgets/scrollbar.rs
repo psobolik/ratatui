@@ -201,6 +201,45 @@ struct ScrollbarAreas {
     end: Rect,
 }
 
+/// An enum representing the part located at a position on a scrollbar.
+///
+/// Used by [`Scrollbar::hit_test`].
+/// ```text
+/// <-------#####------->
+/// ^^     ^^   ^^     ^^
+/// ││     ││   ││     ││
+/// │ ─────  ───  ───── │
+/// │   │     │     │   └ End
+/// │   │     │     └──── TrackHigh
+/// │   │     └────────── Thumb
+/// │   └──────────────── TrackLow
+/// └──────────────────── Begin
+/// ```
+#[derive(Debug, Display, EnumString, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum ScrollbarPosition {
+    /// The position of the scrollbar's begin symbol.
+    Begin,
+    /// The area between the scrollbar's begin symbol and its thumb.
+    TrackLow,
+    /// The area occupied by the scrollbar's thumb.
+    Thumb,
+    /// The area between the scrollbar's thumb and its end symbol.
+    TrackHigh,
+    /// The position of the scrollbar's end symbol.
+    End,
+}
+
+/// A struct representing the area of each part of a scrollbar.
+/// Used internally by [`Scrollbar::part_areas`] to return calculated areas.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+struct ScrollbarAreas {
+    begin: Rect,
+    track_low: Rect,
+    thumb: Rect,
+    track_high: Rect,
+    end: Rect,
+}
+
 impl<'a> Default for Scrollbar<'a> {
     fn default() -> Self {
         Self::new(ScrollbarOrientation::default())
@@ -470,6 +509,48 @@ impl<'a> Scrollbar<'a> {
     }
 }
 
+impl Default for ScrollbarState {
+    fn default() -> Self {
+        Self::new(0)
+
+    /// Returns an [`Option<ScrollbarPosition>`] describing what part of the
+    /// scrollbar is at a given position, if any.
+    ///
+    /// ```text
+    /// <-------#####------->
+    /// ^^     ^^   ^^     ^^
+    /// ││     ││   ││     ││
+    /// │ ─────  ───  ───── │
+    /// │   │     │     │   └ End
+    /// │   │     │     └──── TrackHigh
+    /// │   │     └────────── Thumb
+    /// │   └──────────────── TrackLow
+    /// └──────────────────── Begin
+    /// ```
+    #[must_use]
+    pub fn hit_test(
+        &self,
+        position: Position,
+        area: Rect,
+        state: &ScrollbarState,
+    ) -> Option<ScrollbarPosition> {
+        let part_areas = self.part_areas(area, state);
+        if part_areas.begin.contains(position) {
+            Some(ScrollbarPosition::Begin)
+        } else if part_areas.track_low.contains(position) {
+            Some(ScrollbarPosition::TrackLow)
+        } else if part_areas.thumb.contains(position) {
+            Some(ScrollbarPosition::Thumb)
+        } else if part_areas.track_high.contains(position) {
+            Some(ScrollbarPosition::TrackHigh)
+        } else if part_areas.end.contains(position) {
+            Some(ScrollbarPosition::End)
+        } else {
+            None
+        }
+    }
+}
+
 impl ScrollbarState {
     /// Constructs a new [`ScrollbarState`] with the specified content length.
     ///
@@ -635,6 +716,52 @@ impl Scrollbar<'_> {
         let track_end_length = (track_length as usize).saturating_sub(thumb_start + thumb_length);
 
         (thumb_start, thumb_length, track_end_length)
+    }
+
+    fn part_areas(&self, area: Rect, state: &ScrollbarState) -> ScrollbarAreas {
+        let (track_start_len, thumb_len, track_end_len) = self.part_lengths(area, state);
+        let begin_len = u16::from(self.begin_symbol.is_some());
+        let end_len = u16::from(self.end_symbol.is_some());
+
+        let begin_start = if self.orientation.is_vertical() {
+            area.y
+        } else {
+            area.x
+        };
+        let track_low_start = begin_start + begin_len;
+        let thumb_start = track_low_start + track_start_len as u16;
+        let track_high_start = thumb_start + thumb_len as u16;
+        let end_start = track_high_start + track_end_len as u16;
+
+        if self.orientation.is_vertical() {
+            let x = if self.orientation == ScrollbarOrientation::VerticalRight && area.width > 0 {
+                area.right() - 1
+            } else {
+                0
+            };
+            ScrollbarAreas {
+                begin: Rect::new(x, begin_start, 1, begin_len),
+                track_low: Rect::new(x, track_low_start, 1, track_start_len as u16),
+                thumb: Rect::new(x, thumb_start, 1, thumb_len as u16),
+                track_high: Rect::new(x, track_high_start, 1, track_end_len as u16),
+                end: Rect::new(x, end_start, 1, end_len),
+            }
+        } else {
+            // horizontal
+            let y = if self.orientation == ScrollbarOrientation::HorizontalBottom && area.height > 0
+            {
+                area.bottom() - 1
+            } else {
+                0
+            };
+            ScrollbarAreas {
+                begin: Rect::new(begin_start, y, begin_len, 1),
+                track_low: Rect::new(track_low_start, y, track_start_len as u16, 1),
+                thumb: Rect::new(thumb_start, y, thumb_len as u16, 1),
+                track_high: Rect::new(track_high_start, y, track_end_len as u16, 1),
+                end: Rect::new(end_start, y, end_len, 1),
+            }
+        }
     }
 
     fn part_areas(&self, area: Rect, state: &ScrollbarState) -> ScrollbarAreas {
